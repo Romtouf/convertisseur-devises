@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convertisseur de Devises</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Heroicons -->
+    <script src="https://unpkg.com/@heroicons/vue@2.0.18/dist/24/outline/esm/index.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-image: 
+                radial-gradient(circle at 100% 100%, rgba(79, 70, 229, 0.2) 0%, transparent 50%),
+                radial-gradient(circle at 0% 0%, rgba(124, 58, 237, 0.2) 0%, transparent 50%),
+                linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            background-attachment: fixed;
+        }
+        .converter-gradient {
+            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+        }
+        .currency-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5' /%3E%3C/svg%3E");
+            background-position: right 1rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+        }
+        .input-focus {
+            transition: all 0.3s ease;
+            caret-color: white;
+        }
+        .input-focus:focus {
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+        .main-container {
+            transition: transform 0.3s ease;
+        }
+        .main-container:hover {
+            transform: translateY(-2px);
+        }
+        /* Suppression des flèches du input number */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <!-- En-tête décoratif -->
+    <div class="max-w-7xl mx-auto mb-8 text-center">
+        <h1 class="text-4xl md:text-6xl font-bold text-gray-800 mb-4">
+            💱 Convertisseur de Devises
+        </h1>
+        <p class="text-gray-600 text-lg">Simple, rapide et précis</p>
+    </div>
+
+    <!-- Conteneur principal du convertisseur -->
+    <div class="main-container max-w-3xl mx-auto converter-gradient rounded-3xl shadow-2xl p-6 md:p-8 text-white" 
+         x-data="currencyConverter">
+        <div class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-purple-200">
+                Convertisseur de Devises
+            </h1>
+            <p class="text-purple-100">Conversion en temps réel pour toutes les devises mondiales</p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Devise source -->
+            <div class="space-y-4">
+                <label class="block text-purple-100 font-medium text-lg mb-2">De</label>
+                <div class="relative group">
+                    <input type="number" 
+                           x-model="amount"
+                           class="w-full p-4 bg-white/30 border-2 border-white/40 rounded-xl text-white placeholder-purple-100 
+                                  input-focus text-lg transition-all group-hover:bg-white/35"
+                           @input="updateConversion()"
+                           placeholder="Montant"
+                           min="0"
+                           step="any">
+                    <div class="absolute inset-y-0 right-4 flex items-center pointer-events-none text-white">
+                        <span x-text="fromCurrency"></span>
+                    </div>
+                </div>
+                <div class="relative">
+                    <select x-model="fromCurrency" 
+                            @change="updateConversion()"
+                            class="w-full p-4 pr-10 bg-white/30 border-2 border-white/40 rounded-xl text-white 
+                                   appearance-none cursor-pointer input-focus text-lg transition-all
+                                   hover:bg-white/35 currency-select">
+                        <template x-for="currency in $store.currencies">
+                            <option :value="currency.code" 
+                                    x-text="`${currency.code} - ${currency.name}`"
+                                    class="text-gray-800">
+                            </option>
+                        </template>
+                    </select>
+                    <div class="absolute right-4 top-1/2 transform -translate-y-1/2 text-purple-200">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Devise cible -->
+            <div class="space-y-4">
+                <label class="block text-purple-100 font-medium text-lg mb-2">Vers</label>
+                <div class="relative bg-white/30 rounded-xl p-4 h-[60px] flex items-center justify-center group
+                           transition-all hover:bg-white/35">
+                    <div class="text-2xl font-bold"
+                         :class="{ 'opacity-50': loading }"
+                         x-text="result || '---'">
+                    </div>
+                    <div x-show="loading" 
+                         class="absolute inset-0 flex items-center justify-center">
+                        <div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                </div>
+                <div class="relative">
+                    <select x-model="toCurrency"
+                            @change="updateConversion()"
+                            class="w-full p-4 pr-10 bg-white/20 border-2 border-white/30 rounded-xl text-white 
+                                   appearance-none cursor-pointer input-focus text-lg transition-all
+                                   hover:bg-white/25 currency-select">
+                        <template x-for="currency in $store.currencies">
+                            <option :value="currency.code" 
+                                    x-text="`${currency.code} - ${currency.name}`"
+                                    class="text-gray-800">
+                            </option>
+                        </template>
+                    </select>
+                    <div class="absolute right-4 top-1/2 transform -translate-y-1/2 text-purple-200">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Taux de change -->
+        <div class="mt-8 text-center" x-show="exchangeRate">
+            <div class="inline-block px-6 py-3 bg-white/20 rounded-full">
+                <p class="text-sm text-purple-100">
+                    1 <span x-text="fromCurrency" class="font-medium"></span> = 
+                    <span class="font-bold text-white" x-text="exchangeRate"></span>
+                    <span x-text="toCurrency" class="font-medium"></span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Message d'erreur -->
+        <div x-show="error" 
+             x-transition
+             class="mt-6 bg-red-500/20 border-l-4 border-red-500 p-4 rounded-r-xl">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-300" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-red-200" x-text="error"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="max-w-3xl mx-auto mt-8 text-center text-gray-600">
+        <p>Taux de change mis à jour en temps réel</p>
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('currencies', [
+                { code: 'EUR', name: 'Euro' },
+                { code: 'USD', name: 'Dollar américain' },
+                { code: 'GBP', name: 'Livre sterling' },
+                { code: 'JPY', name: 'Yen japonais' },
+                { code: 'CAD', name: 'Dollar canadien' },
+                { code: 'CHF', name: 'Franc suisse' },
+                { code: 'AUD', name: 'Dollar australien' },
+                { code: 'CNY', name: 'Yuan chinois' },
+                { code: 'INR', name: 'Roupie indienne' },
+                { code: 'BRL', name: 'Real brésilien' },
+                { code: 'RUB', name: 'Rouble russe' },
+                { code: 'KRW', name: 'Won sud-coréen' },
+                { code: 'SGD', name: 'Dollar de Singapour' },
+                { code: 'NZD', name: 'Dollar néo-zélandais' },
+                { code: 'MXN', name: 'Peso mexicain' }
+            ].sort((a, b) => a.name.localeCompare(b.name)))
+
+            Alpine.data('currencyConverter', () => ({
+                amount: 1,
+                fromCurrency: 'EUR',
+                toCurrency: 'USD',
+                result: null,
+                error: null,
+                loading: false,
+                exchangeRate: null,
+                
+                async updateConversion() {
+                    if (!this.amount || this.amount <= 0) {
+                        this.result = null;
+                        this.exchangeRate = null;
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.error = null;
+
+                    try {
+                        const response = await fetch(
+                            `https://api.exchangerate-api.com/v4/latest/${this.fromCurrency}`
+                        );
+                        
+                        if (!response.ok) {
+                            throw new Error('Erreur réseau');
+                        }
+
+                        const data = await response.json();
+                        const rate = data.rates[this.toCurrency];
+                        
+                        if (!rate) {
+                            throw new Error('Taux de change non disponible');
+                        }
+
+                        const converted = this.amount * rate;
+                        this.result = `${converted.toFixed(2)} ${this.toCurrency}`;
+                        this.exchangeRate = rate.toFixed(4);
+                    } catch (err) {
+                        this.error = "Erreur lors de la conversion. Veuillez réessayer.";
+                        this.result = null;
+                        this.exchangeRate = null;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                init() {
+                    this.updateConversion();
+                }
+            }))
+        })
+    </script>
+</body>
+</html>
